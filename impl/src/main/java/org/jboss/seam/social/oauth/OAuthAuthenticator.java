@@ -18,6 +18,7 @@ package org.jboss.seam.social.oauth;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.util.Collection;
 
 import javax.enterprise.context.SessionScoped;
 import javax.enterprise.inject.Instance;
@@ -26,14 +27,27 @@ import javax.faces.context.FacesContext;
 import javax.inject.Inject;
 import javax.inject.Named;
 
+import org.jboss.seam.security.AuthenticationException;
 import org.jboss.seam.security.Authenticator;
 import org.jboss.seam.security.BaseAuthenticator;
+import org.jboss.seam.security.Identity;
+import org.jboss.seam.security.Authenticator.AuthenticationStatus;
 import org.jboss.seam.security.events.DeferredAuthenticationEvent;
+import org.jboss.seam.security.management.picketlink.IdentitySessionProducer;
 import org.jboss.seam.social.MultiServicesManager;
 import org.jboss.solder.logging.Logger;
+import org.picketlink.idm.api.Group;
+import org.picketlink.idm.api.IdentitySession;
+import org.picketlink.idm.api.Role;
+import org.picketlink.idm.api.RoleType;
+import org.picketlink.idm.api.User;
+import org.picketlink.idm.common.exception.FeatureNotSupportedException;
+import org.picketlink.idm.common.exception.IdentityException;
 
 /**
  * An Authenticator implementation that uses OAuth to authenticate the user.
+ * 
+ * Based on OpenIdAuthenticator from Seam Security External module.
  * 
  * @author maschmid
  *
@@ -48,13 +62,36 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
     
     private String serviceName = null;
     
+    /**
+     * If this property is set to true (the default) then user roles and attributes will be managed using the Identity
+     * Management API.
+     */
+    private boolean identityManaged = true;
+    
+    @Inject
+    Identity identity;
+    
     @Inject
     MultiServicesManager multiServicesManager;
+    
+    @Inject
+    Instance<IdentitySession> identitySession;
+    
+    @Inject
+    IdentitySessionProducer identitySessionProducer;
     
     @Inject
     Logger log;
     
     @Inject BeanManager beanManager;
+    
+    public boolean isIdentityManaged() {
+        return identityManaged;
+    }
+
+    public void setIdentityManaged(boolean identityManaged) {
+        this.identityManaged = identityManaged;
+    }
     
     public void setServiceName(String serviceName) {
         this.serviceName = serviceName;
@@ -66,10 +103,9 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
     
     @Override
     public void authenticate() {
-        
+               
         // If there is only one
         if (serviceName == null && !oauthService.isUnsatisfied() && !oauthService.isAmbiguous()) {
-            log.debug("Authenticating unambiguous OAuthService");
             
             OAuthService unambiguousOAuthService = oauthService.get();
             
@@ -81,29 +117,24 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
                 
                 try {
                     FacesContext.getCurrentInstance().getExternalContext().redirect(unambiguousOAuthService.getAuthorizationUrl());
+                    setStatus(AuthenticationStatus.DEFERRED);
                 } catch (IOException e) {
                     log.error("Failed to redirect ", e);
                     setStatus(AuthenticationStatus.FAILURE);
                 }
-            
-                setStatus(AuthenticationStatus.DEFERRED);
             }
         }
-        else {
-            // use MultiServicesManager
-            log.debug("Useing oauthService by name");
-            
+        else {           
             String serviceUrl = multiServicesManager.initNewSession(serviceName);
             
             try {
                 FacesContext.getCurrentInstance().getExternalContext().redirect(serviceUrl);
+                setStatus(AuthenticationStatus.DEFERRED);
             } catch (IOException e) {
                 log.error("Failed to redirect ", e);
                 setStatus(AuthenticationStatus.FAILURE);
             }
         }
-        
-        setStatus(AuthenticationStatus.FAILURE);
     }
     
     public String getVerifierParamName() {
@@ -135,12 +166,25 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
 
     public void connect() {
         if (serviceName != null) {
+                       
             multiServicesManager.connectCurrentService();
            
             OAuthService currentService = multiServicesManager.getCurrentService();
             OAuthSession currentSession = multiServicesManager.getCurrentSession();
             
-            setUser(new OAuthUser(currentService.getType(), currentSession.getUserProfile()));
+            OAuthUser user = new OAuthUser(currentService.getType(), currentSession.getUserProfile());
+                
+            if (isIdentityManaged()) {
+                // By default we set the status to FAILURE, if we manage to get to the end
+                // of this method we get rewarded with a SUCCESS
+                setStatus(AuthenticationStatus.FAILURE);
+                
+                if (identitySessionProducer.isConfigured()) {
+                    validateManagedUser(user);
+                }
+            }
+            
+            setUser(user);
             setStatus(AuthenticationStatus.SUCCESS);
             
             beanManager.fireEvent(new DeferredAuthenticationEvent(true));
@@ -148,5 +192,46 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         else {
             throw new UnsupportedOperationException("verifier with unambiguous service not implemented yet");
         }
+    }
+    
+    protected void validateManagedUser(OAuthUser principal) {
+        IdentitySession session = identitySession.get();
+        
+        try {            
+            // Check that the user's identity exists
+            if (session.getPersistenceManager().findUser(principal.getId()) == null) {
+                // The user wasn't found, let's create them
+                
+                User user = session.getPersistenceManager().createUser(principal.getId());
+                
+                // TODO allow the OAuth -> IDM attribute mapping to be configured
+                // e.g.
+                //session.getAttributesManager().addAttribute(user, "fullName", principal.getUserProfile().getFullName());
+                //session.getAttributesManager().addAttribute(user, "profileImageUrl", principal.getUserProfile().getProfileImageUrl());
+                     
+                // Load the user's roles and groups        
+                try {            
+                    Collection<RoleType> roleTypes = session.getRoleManager().findUserRoleTypes(user);
+
+                    for (RoleType roleType : roleTypes) {
+                        for (Role role : session.getRoleManager().findRoles(user, roleType)) {
+                            identity.addRole(role.getRoleType().getName(),
+                                    role.getGroup().getName(), role.getGroup().getGroupType());
+                        }
+                    }
+                    
+                    for (Group g : session.getRelationshipManager().findAssociatedGroups(user)) {
+                        identity.addGroup(g.getName(), g.getGroupType());
+                    }
+                } catch (FeatureNotSupportedException ex) {
+                    throw new AuthenticationException("Error loading user's roles and groups", ex);
+                } catch (IdentityException ex) {
+                    throw new AuthenticationException("Error loading user's roles and groups", ex);
+                }          
+                
+            }
+        } catch (IdentityException ex) {
+            throw new AuthenticationException("Error locating User record for OAuth user", ex);
+        }     
     }
 }
