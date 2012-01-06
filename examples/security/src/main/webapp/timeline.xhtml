@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+                xmlns:ui="http://java.sun.com/jsf/facelets"
+                xmlns:f="http://java.sun.com/jsf/core"
+                xmlns:h="http://java.sun.com/jsf/html"
+                template="/WEB-INF/templates/default.xhtml">
+    <ui:define name="content">
+        <h:messages/>
+        <h1>Seam Social Security Example</h1>
+
+        <p>Your (future) Timeline</p>
+        <h:form id="form">
+            <h:panelGroup id="identity"
+                          rendered="#{identity.loggedIn}">
+              
+              <p>user.id: <h:outputText value="#{identity.user.id}"/></p>
+              <p>user.serviceName: <h:outputText value="#{identity.user.serviceName}"/></p>
+              <p>user.fullName: <h:outputText value="#{identity.user.userProfile.fullName}"/></p>              
+            </h:panelGroup>        
+            
+        </h:form>
+    </ui:define>
+</ui:composition>
