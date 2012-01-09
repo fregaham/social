@@ -17,9 +17,14 @@ package org.jboss.seam.social.twitter;
 
 import java.util.Date;
 
+import org.codehaus.jackson.annotate.JsonCreator;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+
 /**
  * Carries data concerning the rate limit status.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class RateLimitStatus {
 
 	private final int hourlyLimit;
@@ -30,7 +35,9 @@ public class RateLimitStatus {
 	
 	private final Date resetTime;
 	
-	public RateLimitStatus(int hourlyLimit, int remainingHits, long resetTimeInSeconds) {
+	@JsonCreator	
+	public RateLimitStatus(@JsonProperty("hourly_limit") int hourlyLimit, 
+			@JsonProperty("remaining_hits") int remainingHits, @JsonProperty("reset_time_in_seconds") long resetTimeInSeconds) {
 		this.hourlyLimit = hourlyLimit;
 		this.remainingHits = remainingHits;
 		this.resetTimeInSeconds = resetTimeInSeconds;
