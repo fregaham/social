@@ -54,7 +54,7 @@ import org.picketlink.idm.common.exception.IdentityException;
  */
 @Named("oauthAuthenticator")
 @SessionScoped
-public class OAuthAuthenticator extends BaseAuthenticator implements Authenticator, Serializable {
+public class OAuthAuthenticatorImpl extends BaseAuthenticator implements OAuthAuthenticator, Authenticator, Serializable {
 
     private static final long serialVersionUID = -5615811225606141834L;
 
@@ -69,7 +69,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
     private boolean identityManaged = true;
     
     @Inject
-    Identity identity;
+    Instance<Identity> identity;
     
     @Inject
     MultiServicesManager multiServicesManager;
@@ -78,7 +78,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
     Instance<IdentitySession> identitySession;
     
     @Inject
-    IdentitySessionProducer identitySessionProducer;
+    Instance<IdentitySessionProducer> identitySessionProducer;
     
     @Inject
     Logger log;
@@ -93,10 +93,12 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         this.identityManaged = identityManaged;
     }
     
+    @Override
     public void setServiceName(String serviceName) {
         this.serviceName = serviceName;
     }
     
+    @Override
     public String getServiceName() {
         return serviceName;
     }
@@ -137,6 +139,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         }
     }
     
+    @Override
     public String getVerifierParamName() {
         if (serviceName != null) {
             return multiServicesManager.getCurrentService().getVerifierParamName();
@@ -146,6 +149,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         }
     }
     
+    @Override
     public String getVerifier() {
         if (serviceName != null) {
             return multiServicesManager.getCurrentSession().getVerifier();
@@ -155,6 +159,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         }
     }
     
+    @Override
     public void setVerifier(String verifier) {
         if (serviceName != null) {
             multiServicesManager.getCurrentSession().setVerifier(verifier);
@@ -164,6 +169,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
         }
     }
 
+    @Override
     public void connect() {
         if (serviceName != null) {
                        
@@ -179,7 +185,7 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
                 // of this method we get rewarded with a SUCCESS
                 setStatus(AuthenticationStatus.FAILURE);
                 
-                if (identitySessionProducer.isConfigured()) {
+                if (identitySessionProducer.get().isConfigured()) {
                     validateManagedUser(user);
                 }
             }
@@ -215,13 +221,13 @@ public class OAuthAuthenticator extends BaseAuthenticator implements Authenticat
 
                     for (RoleType roleType : roleTypes) {
                         for (Role role : session.getRoleManager().findRoles(user, roleType)) {
-                            identity.addRole(role.getRoleType().getName(),
+                            identity.get().addRole(role.getRoleType().getName(),
                                     role.getGroup().getName(), role.getGroup().getGroupType());
                         }
                     }
                     
                     for (Group g : session.getRelationshipManager().findAssociatedGroups(user)) {
-                        identity.addGroup(g.getName(), g.getGroupType());
+                        identity.get().addGroup(g.getName(), g.getGroupType());
                     }
                 } catch (FeatureNotSupportedException ex) {
                     throw new AuthenticationException("Error loading user's roles and groups", ex);
