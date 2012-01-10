@@ -22,21 +22,13 @@ import org.jboss.seam.security.annotations.management.PropertyType;
 @Entity
 public class IdentityObject implements Serializable {
     private static final long serialVersionUID = -4623023512038059728L;
-
-    private Long id;
+  
+    @Id
     @IdentityProperty(PropertyType.NAME) private String name;
     private IdentityObjectType type;
 
-    @Id
-    @GeneratedValue
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
+    private String fullName;
+    private String profileImageUrl;
     
     public String getName() {
         return name;
@@ -45,6 +37,24 @@ public class IdentityObject implements Serializable {
     public void setName(String name) {
         this.name = name;
     }
+    
+    public String getProfileImageUrl() {
+        return profileImageUrl;
+    }
+
+    public void setProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    public String getFullName() { 
+        return fullName;
+    }
+    
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+    
+    
 
     @ManyToOne
     @IdentityProperty(PropertyType.TYPE)

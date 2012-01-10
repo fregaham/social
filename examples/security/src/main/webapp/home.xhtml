@@ -24,6 +24,10 @@
 		
 			<h:panelGroup rendered="#{identity.loggedIn}">
 				<h:commandButton action="#{identity.logout}" value="logout"/>
+				
+				<h:inputText value="#{socialMessages.message}"/>
+				<h:commandButton action="#{socialMessages.post}" value="Send"/>
+				
 			</h:panelGroup>		
 		
 		</h:form>		
@@ -31,7 +35,15 @@
 		<ul>
 		<ui:repeat var="u" value="#{userSearch.users}">
 			<li>
-				<h:outputText value="#{u.id}"/>
+				<h:outputText value="#{u.name} - #{u.fullName} - #{u.type.name}"/>
+			</li>
+		</ui:repeat>
+		</ul>
+		
+		<ul>
+		<ui:repeat var="m" value="#{socialMessages.messages}">
+			<li>
+				<h:outputText value="#{m.message}"/>  <h:outputText value="#{m.user.fullName}"/> <img src="#{m.user.profileImageUrl}"/>
 			</li>
 		</ui:repeat>
 		</ul>
